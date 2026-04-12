@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { useAIStore } from '../store/aiStore';
 import { Sparkles, Scissors, Film, Loader2, Check, X, Play, Download } from 'lucide-react';
 import type { ClipSuggestion } from '../types/project';
+import { exportToFile } from '../utils/exportToFile';
 
 export default function AIPanel() {
-  const { words, videoPath, backendUrl, deleteWordRange, setCurrentTime } = useEditorStore();
+  const { words, videoPath, backendUrl, deleteWordRange, setCurrentTime, getKeepSegments, deletedRanges } = useEditorStore();
   const {
     defaultProvider,
     providers,
@@ -106,35 +107,55 @@ export default function AIPanel() {
     [setCurrentTime],
   );
 
+  // Compute keep-segments for each clip once; recomputes when cuts or clip list change.
+  const clipSegmentMap = useMemo(() => {
+    const allSegments = getKeepSegments();
+    return clipSuggestions.map((clip) => {
+      const clipped = allSegments
+        .filter((s) => s.end > clip.startTime && s.start < clip.endTime)
+        .map((s) => ({ start: Math.max(s.start, clip.startTime), end: Math.min(s.end, clip.endTime) }));
+      return clipped.length > 0 ? clipped : [{ start: clip.startTime, end: clip.endTime }];
+    });
+  }, [clipSuggestions, deletedRanges, getKeepSegments]);
+
   const [exportingClipIndex, setExportingClipIndex] = useState<number | null>(null);
+  const [exportedClipIndex, setExportedClipIndex] = useState<number | null>(null);
+  const [exportClipError, setExportClipError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (exportedClipIndex === null) return;
+    const t = setTimeout(() => setExportedClipIndex(null), 3000);
+    return () => clearTimeout(t);
+  }, [exportedClipIndex]);
+
+  useEffect(() => {
+    if (!exportClipError) return;
+    const t = setTimeout(() => setExportClipError(null), 3000);
+    return () => clearTimeout(t);
+  }, [exportClipError]);
 
   const handleExportClip = useCallback(
-    async (clip: ClipSuggestion, index: number) => {
+    async (clip: ClipSuggestion, index: number, keepSegments: Array<{ start: number; end: number }>) => {
       if (!videoPath) return;
       setExportingClipIndex(index);
-      try {
-        const safeName = clip.title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
-        const dirSep = videoPath.lastIndexOf('\\') >= 0 ? '\\' : '/';
-        const dir = videoPath.substring(0, videoPath.lastIndexOf(dirSep));
-        const outputPath = `${dir}${dirSep}${safeName}_clip.mp4`;
+      setExportedClipIndex(null);
+      setExportClipError(null);
 
-        const res = await fetch(`${backendUrl}/export`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            input_path: videoPath,
-            output_path: outputPath,
-            keep_segments: [{ start: clip.startTime, end: clip.endTime }],
-            mode: 'fast',
-            format: 'mp4',
-          }),
+      const safeName = clip.title.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
+      const mode = keepSegments.length > 1 ? 'reencode' : 'fast';
+
+      try {
+        const saved = await exportToFile({
+          backendUrl,
+          body: { input_path: videoPath, keep_segments: keepSegments, mode, format: 'mp4' },
+          suggestedName: `${safeName}_clip.mp4`,
+          format: 'mp4',
+          electronDefaultPath: videoPath.replace(/[^/\\]*$/, `${safeName}_clip.mp4`),
         });
-        if (!res.ok) throw new Error('Export failed');
-        const data = await res.json();
-        alert(`Clip exported to: ${data.output_path}`);
+        if (saved) setExportedClipIndex(index);
       } catch (err) {
         console.error(err);
-        alert('Failed to export clip. Check console for details.');
+        setExportClipError('Export failed');
       } finally {
         setExportingClipIndex(null);
       }
@@ -265,7 +286,10 @@ export default function AIPanel() {
 
             {clipSuggestions.length > 0 && (
               <div className="space-y-3">
-                {clipSuggestions.map((clip, i) => (
+                {clipSuggestions.map((clip, i) => {
+                  const keepSegments = clipSegmentMap[i];
+                  const hasCuts = keepSegments.length > 1;
+                  return (
                   <div key={i} className="p-3 bg-editor-surface rounded-lg space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold">{clip.title}</span>
@@ -274,6 +298,11 @@ export default function AIPanel() {
                       </span>
                     </div>
                     <p className="text-[11px] text-editor-text-muted">{clip.reason}</p>
+                    {hasCuts && (
+                      <p className="text-[10px] text-editor-accent">
+                        Contains word-level cuts — will re-encode on export.
+                      </p>
+                    )}
                     <div className="flex gap-2">
                       <button
                         onClick={() => handlePreviewClip(clip)}
@@ -282,23 +311,29 @@ export default function AIPanel() {
                         <Play className="w-3 h-3" /> Preview
                       </button>
                       <button
-                        onClick={() => handleExportClip(clip, i)}
+                        onClick={() => handleExportClip(clip, i, keepSegments)}
                         disabled={exportingClipIndex === i}
                         className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-editor-success/20 text-editor-success rounded hover:bg-editor-success/30 disabled:opacity-50 transition-colors"
                       >
                         {exportingClipIndex === i ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : exportedClipIndex === i ? (
+                          <Check className="w-3 h-3" />
                         ) : (
                           <Download className="w-3 h-3" />
                         )}
-                        Export
+                        {exportedClipIndex === i ? 'Saved!' : 'Export'}
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
+        )}
+        {exportClipError && (
+          <p className="text-xs text-editor-danger px-4 py-2 shrink-0">{exportClipError}</p>
         )}
       </div>
     </div>
