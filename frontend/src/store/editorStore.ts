@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { Word, Segment, DeletedRange, TranscriptionResult } from '../types/project';
+import { diffTranscript } from '../utils/diffTranscript';
 
 interface EditorState {
   videoPath: string | null;
@@ -41,6 +42,8 @@ interface EditorActions {
   setExporting: (active: boolean, progress?: number) => void;
   getKeepSegments: () => Array<{ start: number; end: number }>;
   getWordAtTime: (time: number) => number;
+  getTranscriptText: () => string;
+  applyPastedTranscript: (pastedText: string) => { deletedCount: number; rangeCount: number };
   loadProject: (projectData: any) => void;
   reset: () => void;
 }
@@ -200,6 +203,70 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           else return mid;
         }
         return lo < words.length ? lo : words.length - 1;
+      },
+
+      getTranscriptText: () => {
+        const { segments, deletedRanges } = get();
+        const deletedSet = new Set<number>();
+        for (const range of deletedRanges) {
+          for (const idx of range.wordIndices) deletedSet.add(idx);
+        }
+
+        const lines: string[] = [];
+        for (const segment of segments) {
+          const wordParts: string[] = [];
+          for (let localIdx = 0; localIdx < segment.words.length; localIdx++) {
+            const globalIdx = (segment.globalStartIndex ?? 0) + localIdx;
+            if (!deletedSet.has(globalIdx)) {
+              wordParts.push(segment.words[localIdx].word.trim());
+            }
+          }
+          if (wordParts.length === 0) continue;
+          const line = segment.speaker
+            ? `${segment.speaker}: ${wordParts.join(' ')}`
+            : wordParts.join(' ');
+          lines.push(line);
+        }
+        return lines.join('\n');
+      },
+
+      applyPastedTranscript: (pastedText) => {
+        const { words, deletedRanges } = get();
+
+        const alreadyDeletedSet = new Set<number>();
+        for (const range of deletedRanges) {
+          for (const idx of range.wordIndices) alreadyDeletedSet.add(idx);
+        }
+
+        const deletedIndices = diffTranscript(words, pastedText, alreadyDeletedSet);
+
+        if (deletedIndices.length === 0) {
+          return { deletedCount: 0, rangeCount: 0 };
+        }
+
+        // Group contiguous indices into DeletedRange objects
+        const newRanges: DeletedRange[] = [];
+        let groupStart = 0;
+
+        for (let i = 1; i <= deletedIndices.length; i++) {
+          if (i === deletedIndices.length || deletedIndices[i] !== deletedIndices[i - 1] + 1) {
+            const group = deletedIndices.slice(groupStart, i);
+            const firstIdx = group[0];
+            const lastIdx = group[group.length - 1];
+            newRanges.push({
+              id: `dr_${nextRangeId++}`,
+              start: words[firstIdx].start,
+              end: words[lastIdx].end,
+              wordIndices: group,
+            });
+            groupStart = i;
+          }
+        }
+
+        // Single set() call = one undo step
+        set({ deletedRanges: [...deletedRanges, ...newRanges] });
+
+        return { deletedCount: deletedIndices.length, rangeCount: newRanges.length };
       },
 
       loadProject: (data) => {
