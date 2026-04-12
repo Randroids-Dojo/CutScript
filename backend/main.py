@@ -1,10 +1,12 @@
 import logging
 import os
+import shutil
 import stat
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Query, Request, HTTPException
+from fastapi import FastAPI, File, Query, Request, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -110,6 +112,15 @@ async def serve_local_file(request: Request, path: str = Query(...)):
             "Content-Length": str(file_size),
         },
     )
+
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Accept a video/audio file upload and save it to a temp path for transcription."""
+    suffix = Path(file.filename).suffix.lower() if file.filename else ".tmp"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        return {"file_path": tmp.name}
 
 
 @app.get("/health")

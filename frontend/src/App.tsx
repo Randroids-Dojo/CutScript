@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useEditorStore } from './store/editorStore';
 import VideoPlayer from './components/VideoPlayer';
 import TranscriptEditor from './components/TranscriptEditor';
@@ -14,7 +14,6 @@ import {
   Sparkles,
   Download,
   Loader2,
-  FolderSearch,
   FileInput,
 } from 'lucide-react';
 
@@ -36,9 +35,8 @@ export default function App() {
   } = useEditorStore();
 
   const [activePanel, setActivePanel] = useState<Panel>(null);
-  const [manualPath, setManualPath] = useState('');
   const [whisperModel, setWhisperModel] = useState('base');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   useKeyboardShortcuts();
 
@@ -70,21 +68,57 @@ export default function App() {
         await transcribeVideo(path);
       }
     } else {
-      // Browser: use the manual path input
-      const path = manualPath.trim();
-      if (path) {
-        loadVideo(path);
-        await transcribeVideo(path);
-      }
+      await handleBrowserOpenFile();
     }
   };
 
-  const handleManualSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const path = manualPath.trim();
-    if (!path) return;
-    loadVideo(path);
-    await transcribeVideo(path);
+  const handleBrowserOpenFile = async () => {
+    let fileHandle: FileSystemFileHandle;
+    try {
+      [fileHandle] = await window.showOpenFilePicker({
+        types: [
+          {
+            description: 'Video & Audio Files',
+            accept: {
+              'video/*': ['.mp4', '.avi', '.mov', '.mkv', '.webm'],
+              'audio/*': ['.m4a'],
+            },
+          },
+        ],
+        multiple: false,
+      });
+    } catch {
+      // User cancelled
+      return;
+    }
+
+    const file = await fileHandle.getFile();
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+
+    const tempPath = await new Promise<string>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${backendUrl}/upload`);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        setUploadProgress(null);
+        if (xhr.status === 200) {
+          resolve(JSON.parse(xhr.responseText).file_path);
+        } else {
+          reject(new Error(`Upload failed: ${xhr.statusText}`));
+        }
+      };
+      xhr.onerror = () => {
+        setUploadProgress(null);
+        reject(new Error('Upload failed'));
+      };
+      xhr.send(formData);
+    });
+
+    loadVideo(tempPath);
+    await transcribeVideo(tempPath);
   };
 
   const transcribeVideo = async (path: string) => {
@@ -154,38 +188,35 @@ export default function App() {
             </button>
           </div>
         ) : (
-          /* Browser: manual path input */
-          <div className="w-full max-w-lg space-y-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-editor-warning/10 border border-editor-warning/30 rounded-lg">
-              <span className="text-editor-warning text-xs">
-                Running in browser — paste the full path to your video file below.
-              </span>
-            </div>
-            <form onSubmit={handleManualSubmit} className="flex gap-2">
-              <div className="flex-1 relative">
-                <FolderSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-editor-text-muted pointer-events-none" />
-                <input
-                  ref={fileInputRef}
-                  type="text"
-                  value={manualPath}
-                  onChange={(e) => setManualPath(e.target.value)}
-                  placeholder="C:\Videos\my-video.mp4"
-                  className="w-full pl-9 pr-3 py-2.5 bg-editor-surface border border-editor-border rounded-lg text-sm text-editor-text placeholder:text-editor-text-muted/40 focus:outline-none focus:border-editor-accent"
-                  autoFocus
-                />
+          /* Browser: File System Access API picker */
+          <div className="flex flex-col items-center gap-3">
+            {uploadProgress !== null ? (
+              <div className="w-full max-w-xs space-y-2">
+                <div className="flex justify-between text-xs text-editor-text-muted">
+                  <span>Uploading…</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-editor-surface rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-editor-accent transition-all duration-150"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
               </div>
-              <button
-                type="submit"
-                disabled={!manualPath.trim()}
-                className="flex items-center gap-2 px-5 py-2.5 bg-editor-accent hover:bg-editor-accent-hover disabled:opacity-40 rounded-lg text-sm text-white font-medium transition-colors whitespace-nowrap"
-              >
-                <Film className="w-4 h-4" />
-                Load &amp; Transcribe
-              </button>
-            </form>
-            <p className="text-[11px] text-editor-text-muted text-center">
-              Supported: MP4, AVI, MOV, MKV, WebM, M4A
-            </p>
+            ) : (
+              <>
+                <button
+                  onClick={handleBrowserOpenFile}
+                  className="flex items-center gap-2 px-6 py-3 bg-editor-accent hover:bg-editor-accent-hover rounded-lg text-white font-medium transition-colors"
+                >
+                  <FolderOpen className="w-5 h-5" />
+                  Open Video File
+                </button>
+                <p className="text-[11px] text-editor-text-muted text-center">
+                  Supported: MP4, AVI, MOV, MKV, WebM, M4A
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>
