@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore } from './store/editorStore';
 import VideoPlayer from './components/VideoPlayer';
 import TranscriptEditor from './components/TranscriptEditor';
@@ -40,10 +41,12 @@ export default function App() {
     backendStatus,
   } = useEditorStore();
 
-  const canUndo = useStore(useEditorStore.temporal, (s) => s.pastStates.length > 0);
-  const canRedo = useStore(useEditorStore.temporal, (s) => s.futureStates.length > 0);
-  const handleUndo = () => useEditorStore.temporal.getState().undo();
-  const handleRedo = () => useEditorStore.temporal.getState().redo();
+  const { canUndo, canRedo } = useStore(useEditorStore.temporal, useShallow((s) => ({
+    canUndo: s.pastStates.length > 0,
+    canRedo: s.futureStates.length > 0,
+  })));
+  const handleUndo = useCallback(() => useEditorStore.temporal.getState().undo(), []);
+  const handleRedo = useCallback(() => useEditorStore.temporal.getState().redo(), []);
 
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [whisperModel, setWhisperModel] = useState('base');

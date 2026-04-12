@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { useAIStore } from '../store/aiStore';
 import { Sparkles, Scissors, Film, Loader2, Check, X, Play, Download } from 'lucide-react';
 import type { ClipSuggestion } from '../types/project';
 import { exportToFile } from '../utils/exportToFile';
+import { useAutoReset } from '../hooks/useAutoReset';
 
 export default function AIPanel() {
   const { words, videoPath, backendUrl, deleteWordRange, setCurrentTime, getKeepSegments, deletedRanges } = useEditorStore();
@@ -119,20 +120,8 @@ export default function AIPanel() {
   }, [clipSuggestions, deletedRanges, getKeepSegments]);
 
   const [exportingClipIndex, setExportingClipIndex] = useState<number | null>(null);
-  const [exportedClipIndex, setExportedClipIndex] = useState<number | null>(null);
-  const [exportClipError, setExportClipError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (exportedClipIndex === null) return;
-    const t = setTimeout(() => setExportedClipIndex(null), 3000);
-    return () => clearTimeout(t);
-  }, [exportedClipIndex]);
-
-  useEffect(() => {
-    if (!exportClipError) return;
-    const t = setTimeout(() => setExportClipError(null), 3000);
-    return () => clearTimeout(t);
-  }, [exportClipError]);
+  const [exportedClipIndex, setExportedClipIndex] = useAutoReset<number | null>(null, 3000);
+  const [exportClipError, setExportClipError] = useAutoReset<string | null>(null, 3000);
 
   const handleExportClip = useCallback(
     async (clip: ClipSuggestion, index: number, keepSegments: Array<{ start: number; end: number }>) => {

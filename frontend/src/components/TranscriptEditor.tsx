@@ -1,4 +1,5 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react';
+import { useAutoReset } from '../hooks/useAutoReset';
 import { useEditorStore } from '../store/editorStore';
 import { Virtuoso } from 'react-virtuoso';
 import { Trash2, RotateCcw, Copy, ClipboardPaste } from 'lucide-react';
@@ -26,14 +27,8 @@ export default function TranscriptEditor() {
   const selectedSet = useMemo(() => new Set(selectedWordIndices), [selectedWordIndices]);
 
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useAutoReset(false, 2000);
   const [showPasteDialog, setShowPasteDialog] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
 
   useEffect(() => {
     if (words.length === 0) return;

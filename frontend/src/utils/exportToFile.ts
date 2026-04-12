@@ -1,18 +1,14 @@
 import { IS_ELECTRON } from './env';
 
-const FORMAT_MIME: Record<string, string> = {
+const FORMAT_MIME: Record<'mp4' | 'mov' | 'webm', string> = {
   mp4: 'video/mp4',
   mov: 'video/quicktime',
   webm: 'video/webm',
 };
 
 /**
- * Show a save dialog, POST to /export, and write the result to the chosen location.
- * Returns true if saved, false if the user cancelled the picker.
- * Throws on network or write errors.
- *
- * onStart is called after the picker resolves but before the export fetch begins,
- * so callers can show a loading indicator only once the user has confirmed.
+ * onStart fires after the user confirms the save location but before the export
+ * fetch begins — use it to show a loading indicator at the right moment.
  */
 export async function exportToFile({
   backendUrl,
@@ -25,7 +21,7 @@ export async function exportToFile({
   backendUrl: string;
   body: Record<string, unknown>;
   suggestedName: string;
-  format: string;
+  format: 'mp4' | 'mov' | 'webm';
   electronDefaultPath?: string;
   onStart?: () => void;
 }): Promise<boolean> {

@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { Download, Loader2, Zap, Cog, Info, Check } from 'lucide-react';
 import type { ExportOptions } from '../types/project';
 import { buildDeletedSet } from '../utils/buildDeletedSet';
 import { exportToFile } from '../utils/exportToFile';
+import { useAutoReset } from '../hooks/useAutoReset';
 
 export default function ExportDialog() {
   const { videoPath, words, deletedRanges, isExporting, exportProgress, backendUrl, setExporting, getKeepSegments } =
@@ -19,25 +20,18 @@ export default function ExportDialog() {
     captions: 'none',
   });
 
-  const [exportDone, setExportDone] = useState(false);
-
-  useEffect(() => {
-    if (!exportDone) return;
-    const t = setTimeout(() => setExportDone(false), 3000);
-    return () => clearTimeout(t);
-  }, [exportDone]);
+  const [exportDone, setExportDone] = useAutoReset(false, 3000);
 
   const handleExport = useCallback(async () => {
     if (!videoPath) return;
 
-    const deletedSet = buildDeletedSet(deletedRanges);
     const suggestedName = videoPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, `_edited.${options.format}`) ?? `export.${options.format}`;
 
     const body: Record<string, unknown> = {
       input_path: videoPath,
       keep_segments: getKeepSegments(),
       words: options.captions !== 'none' ? words : undefined,
-      deleted_indices: options.captions !== 'none' ? [...deletedSet] : undefined,
+      deleted_indices: options.captions !== 'none' ? [...buildDeletedSet(deletedRanges)] : undefined,
       ...options,
     };
 
