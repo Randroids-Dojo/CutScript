@@ -129,3 +129,12 @@ ipcMain.handle('fs:writeFile', async (_event, filePath, content) => {
   fs.writeFileSync(filePath, content, 'utf-8');
   return true;
 });
+
+ipcMain.handle('backend:restart', async () => {
+  if (!pythonBackend) return false;
+  pythonBackend.stop();
+  // Brief pause for the OS to release the port before re-spawning
+  await new Promise((r) => setTimeout(r, 600));
+  await pythonBackend.start();
+  return true;
+});

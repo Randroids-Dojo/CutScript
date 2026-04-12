@@ -37,6 +37,9 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [whisperModel, setWhisperModel] = useState('base');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [cmdCopied, setCmdCopied] = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   useKeyboardShortcuts();
 
@@ -45,6 +48,35 @@ export default function App() {
       window.electronAPI!.getBackendUrl().then(setBackendUrl);
     }
   }, [setBackendUrl]);
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`${backendUrl}/health`, {
+          signal: AbortSignal.timeout(2000),
+        });
+        setBackendStatus(res.ok ? 'online' : 'offline');
+      } catch {
+        setBackendStatus('offline');
+      }
+    };
+    check();
+    const id = setInterval(check, 3000);
+    return () => clearInterval(id);
+  }, [backendUrl]);
+
+  const handleRestartBackend = async () => {
+    setRestarting(true);
+    setBackendStatus('checking');
+    await window.electronAPI!.restartBackend();
+    setRestarting(false);
+  };
+
+  const handleCopyStartCmd = async () => {
+    await navigator.clipboard.writeText('cd backend && .venv/bin/python -m uvicorn main:app --port 8642');
+    setCmdCopied(true);
+    setTimeout(() => setCmdCopied(false), 2000);
+  };
 
   const handleLoadProject = async () => {
     if (!IS_ELECTRON) return;
@@ -154,6 +186,16 @@ export default function App() {
           </p>
         </div>
 
+        {/* Backend status */}
+        <BackendStatusBadge
+          status={backendStatus}
+          isElectron={IS_ELECTRON}
+          restarting={restarting}
+          cmdCopied={cmdCopied}
+          onRestart={handleRestartBackend}
+          onCopyCmd={handleCopyStartCmd}
+        />
+
         {/* Whisper model selector */}
         <div className="flex items-center gap-3">
           <label className="text-xs text-editor-text-muted whitespace-nowrap">Whisper model:</label>
@@ -259,6 +301,7 @@ export default function App() {
             active={activePanel === 'settings'}
             onClick={() => togglePanel('settings')}
           />
+          <BackendStatusDot status={backendStatus} />
         </div>
       </header>
 
@@ -337,5 +380,77 @@ function ToolbarButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+type BackendStatus = 'checking' | 'online' | 'offline';
+
+function BackendStatusDot({ status }: { status: BackendStatus }) {
+  const color =
+    status === 'online' ? 'bg-green-500' :
+    status === 'offline' ? 'bg-red-500' :
+    'bg-yellow-500 animate-pulse';
+  const label =
+    status === 'online' ? 'Backend online' :
+    status === 'offline' ? 'Backend offline' :
+    'Connecting to backend…';
+  return (
+    <div title={label} className="flex items-center gap-1.5 px-2">
+      <div className={`w-2 h-2 rounded-full ${color}`} />
+    </div>
+  );
+}
+
+function BackendStatusBadge({
+  status, isElectron, restarting, cmdCopied, onRestart, onCopyCmd,
+}: {
+  status: BackendStatus;
+  isElectron: boolean;
+  restarting: boolean;
+  cmdCopied: boolean;
+  onRestart: () => void;
+  onCopyCmd: () => void;
+}) {
+  if (status === 'online') return null;
+
+  const isChecking = status === 'checking';
+
+  return (
+    <div className="w-full max-w-md flex flex-col gap-2">
+      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+        isChecking
+          ? 'bg-editor-surface/50 border-editor-border'
+          : 'bg-red-500/10 border-red-500/30'
+      }`}>
+        <div className={`w-2 h-2 rounded-full shrink-0 ${
+          isChecking ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
+        }`} />
+        <span className="text-xs flex-1 text-editor-text-muted">
+          {isChecking ? 'Connecting to backend…' : 'Backend is not running'}
+        </span>
+        {!isChecking && isElectron && (
+          <button
+            onClick={onRestart}
+            disabled={restarting}
+            className="text-xs px-2 py-1 bg-editor-accent hover:bg-editor-accent-hover disabled:opacity-50 rounded text-white transition-colors shrink-0"
+          >
+            {restarting ? 'Starting…' : 'Start Backend'}
+          </button>
+        )}
+      </div>
+      {!isChecking && !isElectron && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-editor-surface border border-editor-border rounded-lg">
+          <code className="text-xs text-editor-text-muted flex-1 truncate">
+            cd backend &amp;&amp; .venv/bin/python -m uvicorn main:app --port 8642
+          </code>
+          <button
+            onClick={onCopyCmd}
+            className="text-xs px-2 py-1 border border-editor-border hover:bg-editor-bg rounded text-editor-text-muted transition-colors shrink-0"
+          >
+            {cmdCopied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
