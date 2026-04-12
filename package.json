@@ -5,6 +5,7 @@
   "description": "CutScript — Open-source AI-powered text-based video editor",
   "main": "electron/main.js",
   "scripts": {
+    "predev": "lsof -ti :5173 | xargs kill -9 2>/dev/null; lsof -ti :8642 | xargs kill -9 2>/dev/null; true",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"wait-on http://localhost:5173 && npm run dev:electron\"",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:electron": "electron .",

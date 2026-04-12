@@ -40,6 +40,7 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [whisperModel, setWhisperModel] = useState('base');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [transcriptionLabel, setTranscriptionLabel] = useState('');
 
   useKeyboardShortcuts();
 
@@ -147,20 +148,44 @@ export default function App() {
 
   const transcribeVideo = async (path: string) => {
     setTranscribing(true, 0);
+    setTranscriptionLabel('Starting…');
     try {
-      const res = await fetch(`${backendUrl}/transcribe`, {
+      const res = await fetch(`${backendUrl}/transcribe/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: path, model: whisperModel }),
       });
       if (!res.ok) throw new Error(`Transcription failed: ${res.statusText}`);
-      const data = await res.json();
-      setTranscription(data);
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop()!;
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const event = JSON.parse(line.slice(6));
+            if (event.error) throw new Error(event.error);
+            setTranscribing(true, event.progress);
+            setTranscriptionLabel(event.label ?? '');
+            if (event.result) setTranscription(event.result);
+          }
+        }
+      } finally {
+        reader.cancel();
+      }
     } catch (err) {
       console.error('Transcription error:', err);
       alert(`Transcription failed. Check the console for details.\n\n${err}`);
     } finally {
       setTranscribing(false);
+      setTranscriptionLabel('');
     }
   };
 
@@ -308,7 +333,7 @@ export default function App() {
                 <div className="flex-1 flex flex-col items-center justify-center gap-4">
                   <Loader2 className="w-8 h-8 text-editor-accent animate-spin" />
                   <p className="text-sm text-editor-text-muted">
-                    Transcribing... {Math.round(transcriptionProgress)}%
+                    {transcriptionLabel || 'Transcribing…'} {Math.round(transcriptionProgress)}%
                   </p>
                 </div>
               ) : words.length > 0 ? (

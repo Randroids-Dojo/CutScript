@@ -72,6 +72,20 @@ Outputs a platform-native package (`.dmg` on macOS, `.exe` installer on Windows,
 
 Audio-only files are processed directly by Whisper (no extraction step), making transcription faster than equivalent video files.
 
+## macOS Notes
+
+### Apple Silicon (M-series)
+
+**GPU acceleration** — ctranslate2 (faster-whisper's inference backend) does not support Apple's MPS. Transcription runs on CPU automatically; no action needed.
+
+**torchcodec warning on startup** — pyannote prints a warning that `libtorchcodec` can't load FFmpeg shared libraries. This is harmless: pyannote falls back to in-memory audio decoding, which works correctly. The warning appears because torchcodec expects FFmpeg to be installed as shared libraries (`libavutil.5x.dylib`) rather than the static build Homebrew ships by default.
+
+**First transcription is slow** — WhisperX downloads alignment models on first use and caches them. Subsequent runs of the same language are fast.
+
+### Intel Mac
+
+No known issues beyond the torchcodec warning above.
+
 ## First Use
 
 1. Launch the app (`npm run dev` or open the built package)
