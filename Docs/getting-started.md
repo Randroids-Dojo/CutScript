@@ -5,13 +5,13 @@
 | Requirement | Notes |
 |------------|-------|
 | Node.js 18+ | For Electron and frontend |
-| Python 3.11 | 3.11 is the recommended version — PyTorch wheels are not yet available for 3.13+ |
+| uv | Python package manager — handles Python 3.11 and the venv automatically |
 | FFmpeg | Must be in `PATH` — used for all video processing |
 | Ollama (optional) | For local AI features without an API key |
 
-Install FFmpeg via Homebrew on macOS:
+Install prerequisites on macOS:
 ```bash
-brew install ffmpeg
+brew install uv ffmpeg
 ```
 
 ## Install
@@ -28,24 +28,11 @@ cd frontend && npm install && cd ..
 
 ### 2. Backend Python environment
 
-The backend has heavy ML dependencies (PyTorch, WhisperX, pyannote). Use a Python 3.11 virtual environment to keep them isolated:
-
 ```bash
-cd backend
-
-# Create venv with Python 3.11
-python3.11 -m venv .venv
-
-# Install all dependencies
-.venv/bin/pip install -r requirements.txt
-
-cd ..
+cd backend && uv sync && cd ..
 ```
 
-> **Note:** `deepfilternet` pins `numpy<2.0` while `whisperx` requires `numpy>=2.1`. This version conflict is a metadata-only warning — both libraries work correctly at runtime. After installing, upgrade numpy to satisfy whisperx:
-> ```bash
-> backend/.venv/bin/pip install "numpy>=2.1.0"
-> ```
+`uv sync` reads `pyproject.toml`, downloads Python 3.11 if needed, creates `.venv`, and installs all dependencies. The `deepfilternet`/`numpy` version conflict is handled automatically via an override in `pyproject.toml`.
 
 ## Run in Development
 
@@ -58,7 +45,7 @@ Or run each service separately:
 
 ```bash
 # Terminal 1 — Backend
-cd backend && .venv/bin/python -m uvicorn main:app --reload --port 8642
+cd backend && uv run uvicorn main:app --reload --port 8642
 
 # Terminal 2 — Frontend (Vite)
 cd frontend && npm run dev

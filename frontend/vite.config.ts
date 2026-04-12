@@ -21,8 +21,8 @@ const backendLauncher = () => {
         if (!spawning) {
           spawning = true;
           const child = spawn(
-            '.venv/bin/python',
-            ['-m', 'uvicorn', 'main:app', '--reload', '--port', '8642'],
+            'uv',
+            ['run', 'uvicorn', 'main:app', '--reload', '--port', '8642'],
             { cwd: backendDir, detached: true, stdio: 'ignore' },
           );
           child.unref();

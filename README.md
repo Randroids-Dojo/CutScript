@@ -21,7 +21,7 @@ An open-source, local-first text-based audio and video editor powered by AI. Edi
 ```bash
 npm install
 cd frontend && npm install && cd ..
-cd backend && python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd ..
+cd backend && uv sync && cd ..
 npm run dev
 ```
 
