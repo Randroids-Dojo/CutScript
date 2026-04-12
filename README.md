@@ -1,5 +1,7 @@
 # CutScript
 
+> **Fork of [DataAnts-AI/CutScript](https://github.com/DataAnts-AI/CutScript).** The original project is the source of essentially everything here — the Electron shell, React frontend, WhisperX transcription, FFmpeg export pipeline, and AI integrations are all DataAnts-AI's work. This fork adds features on top and contributes improvements back upstream where the maintainers want them. See [Docs/attribution.md](Docs/attribution.md) for details.
+
 An open-source, local-first text-based audio and video editor powered by AI. Edit your video by editing the transcript — delete a word and it's cut from the video.
 
 <img width="1034" height="661" alt="CutScript editor" src="https://github.com/user-attachments/assets/b1ed9505-792e-42ca-bb73-85458d0f02a5" />
@@ -35,10 +37,6 @@ See **[Docs/getting-started.md](Docs/getting-started.md)** for detailed setup, p
 | [Keyboard Shortcuts](Docs/keyboard-shortcuts.md) | All keyboard shortcuts |
 | [API Reference](Docs/api-reference.md) | Backend REST endpoints |
 | [Attribution](Docs/attribution.md) | Fork history and what changed |
-
-## Fork
-
-CutScript is forked from [DataAnts-AI/CutScript](https://github.com/DataAnts-AI/CutScript). The original project is the source of essentially everything here — the Electron shell, React frontend, WhisperX transcription, FFmpeg export pipeline, and AI integrations are all DataAnts-AI's work. This fork is in early stages, adding features on top and contributing improvements back upstream where the maintainers want them. See [Docs/attribution.md](Docs/attribution.md) for details.
 
 ## License
 
