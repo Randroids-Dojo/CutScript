@@ -6,7 +6,10 @@ import WaveformTimeline from './components/WaveformTimeline';
 import AIPanel from './components/AIPanel';
 import ExportDialog from './components/ExportDialog';
 import SettingsPanel from './components/SettingsPanel';
+import BackendStatusDot from './components/BackendStatusDot';
+import type { BackendStatus } from './types/project';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { IS_ELECTRON, startBackend } from './utils/env';
 import {
   Film,
   FolderOpen,
@@ -16,8 +19,6 @@ import {
   Loader2,
   FileInput,
 } from 'lucide-react';
-
-const IS_ELECTRON = !!window.electronAPI;
 
 type Panel = 'ai' | 'settings' | 'export' | null;
 
@@ -39,7 +40,6 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [whisperModel, setWhisperModel] = useState('base');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [restarting, setRestarting] = useState(false);
 
   useKeyboardShortcuts();
 
@@ -50,6 +50,7 @@ export default function App() {
   }, [setBackendUrl]);
 
   useEffect(() => {
+    let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout>;
     const check = async () => {
       let online = false;
@@ -58,24 +59,15 @@ export default function App() {
         online = res.ok;
       } catch {}
       setBackendStatus(online ? 'online' : 'offline');
-      timeoutId = setTimeout(check, online ? 5000 : 1000);
+      if (!cancelled) timeoutId = setTimeout(check, online ? 5000 : 1000);
     };
     check();
-    return () => clearTimeout(timeoutId);
+    return () => { cancelled = true; clearTimeout(timeoutId); };
   }, [backendUrl, setBackendStatus]);
 
   const handleRestartBackend = async () => {
-    setRestarting(true);
     setBackendStatus('checking');
-    try {
-      if (IS_ELECTRON) {
-        await window.electronAPI!.restartBackend();
-      } else {
-        await fetch('/api/start-backend', { method: 'POST' });
-      }
-    } finally {
-      setRestarting(false);
-    }
+    await startBackend();
   };
 
   const handleLoadProject = async () => {
@@ -186,10 +178,8 @@ export default function App() {
           </p>
         </div>
 
-        {/* Backend status */}
         <BackendStatusBadge
           status={backendStatus}
-          restarting={restarting}
           onRestart={handleRestartBackend}
         />
 
@@ -298,7 +288,7 @@ export default function App() {
             active={activePanel === 'settings'}
             onClick={() => togglePanel('settings')}
           />
-          <BackendStatusDot status={backendStatus} />
+          <BackendStatusDot status={backendStatus} className="ml-2" />
         </div>
       </header>
 
@@ -380,27 +370,10 @@ function ToolbarButton({
   );
 }
 
-type BackendStatus = 'checking' | 'online' | 'offline';
-
-function BackendStatusDot({ status }: { status: BackendStatus }) {
-  const color =
-    status === 'online' ? 'bg-green-500' :
-    status === 'offline' ? 'bg-red-500' :
-    'bg-yellow-500 animate-pulse';
-  const label =
-    status === 'online' ? 'Backend online' :
-    status === 'offline' ? 'Backend offline' :
-    'Connecting to backend…';
-  return (
-    <div title={label} className={`w-2 h-2 rounded-full ml-2 ${color}`} />
-  );
-}
-
 function BackendStatusBadge({
-  status, restarting, onRestart,
+  status, onRestart,
 }: {
   status: BackendStatus;
-  restarting: boolean;
   onRestart: () => void;
 }) {
   if (status === 'online') return null;
@@ -408,28 +381,21 @@ function BackendStatusBadge({
   const isChecking = status === 'checking';
 
   return (
-    <div className="w-full max-w-md flex flex-col gap-2">
-      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
-        isChecking
-          ? 'bg-editor-surface/50 border-editor-border'
-          : 'bg-red-500/10 border-red-500/30'
-      }`}>
-        <div className={`w-2 h-2 rounded-full shrink-0 ${
-          isChecking ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'
-        }`} />
-        <span className="text-xs flex-1 text-editor-text-muted">
-          {isChecking ? 'Connecting to backend…' : 'Backend is not running'}
-        </span>
-        {!isChecking && (
-          <button
-            onClick={onRestart}
-            disabled={restarting}
-            className="text-xs px-2 py-1 bg-editor-accent hover:bg-editor-accent-hover disabled:opacity-50 rounded text-white transition-colors shrink-0"
-          >
-            {restarting ? 'Starting…' : 'Start Backend'}
-          </button>
-        )}
-      </div>
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border w-full max-w-md ${
+      isChecking ? 'bg-editor-surface/50 border-editor-border' : 'bg-red-500/10 border-red-500/30'
+    }`}>
+      <BackendStatusDot status={status} />
+      <span className="text-xs flex-1 text-editor-text-muted">
+        {isChecking ? 'Connecting to backend…' : 'Backend is not running'}
+      </span>
+      {!isChecking && (
+        <button
+          onClick={onRestart}
+          className="text-xs px-2 py-1 bg-editor-accent hover:bg-editor-accent-hover rounded text-white transition-colors shrink-0"
+        >
+          Start Backend
+        </button>
+      )}
     </div>
   );
 }

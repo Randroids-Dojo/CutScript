@@ -1,3 +1,5 @@
+export type BackendStatus = 'checking' | 'online' | 'offline';
+
 export interface Word {
   word: string;
   start: number;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
-import type { Word, Segment, DeletedRange, TranscriptionResult } from '../types/project';
+import type { Word, Segment, DeletedRange, TranscriptionResult, BackendStatus } from '../types/project';
 import { diffTranscript, groupContiguousIndices } from '../utils/diffTranscript';
 import { buildDeletedSet } from '../utils/buildDeletedSet';
 
@@ -25,12 +25,12 @@ interface EditorState {
   exportProgress: number;
 
   backendUrl: string;
-  backendStatus: 'checking' | 'online' | 'offline';
+  backendStatus: BackendStatus;
 }
 
 interface EditorActions {
   setBackendUrl: (url: string) => void;
-  setBackendStatus: (status: 'checking' | 'online' | 'offline') => void;
+  setBackendStatus: (status: BackendStatus) => void;
   loadVideo: (path: string) => void;
   setTranscription: (result: TranscriptionResult) => void;
   setCurrentTime: (time: number) => void;

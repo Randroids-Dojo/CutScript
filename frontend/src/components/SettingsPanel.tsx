@@ -2,29 +2,19 @@ import { useAIStore } from '../store/aiStore';
 import { useState, useEffect } from 'react';
 import type { AIProvider } from '../types/project';
 import { useEditorStore } from '../store/editorStore';
+import BackendStatusDot from './BackendStatusDot';
+import { IS_ELECTRON, startBackend, BACKEND_STATUS_LABEL } from '../utils/env';
 import { Bot, Cloud, Brain, RefreshCw, Server } from 'lucide-react';
-
-const IS_ELECTRON = !!window.electronAPI;
 
 export default function SettingsPanel() {
   const { providers, defaultProvider, setProviderConfig, setDefaultProvider } = useAIStore();
   const { backendUrl, backendStatus, setBackendStatus } = useEditorStore();
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
-  const [restarting, setRestarting] = useState(false);
 
   const handleStart = async () => {
-    setRestarting(true);
     setBackendStatus('checking');
-    try {
-      if (IS_ELECTRON) {
-        await window.electronAPI!.restartBackend();
-      } else {
-        await fetch('/api/start-backend', { method: 'POST' });
-      }
-    } finally {
-      setRestarting(false);
-    }
+    await startBackend();
   };
 
   const fetchOllamaModels = async () => {
@@ -58,20 +48,12 @@ export default function SettingsPanel() {
     claude: 'Claude (Anthropic)',
   };
 
-  const statusColor =
-    backendStatus === 'online' ? 'bg-green-500' :
-    backendStatus === 'offline' ? 'bg-red-500' :
-    'bg-yellow-500 animate-pulse';
-  const statusLabel =
-    backendStatus === 'online' ? 'Online' :
-    backendStatus === 'offline' ? 'Offline' :
-    'Connecting…';
+  const isChecking = backendStatus === 'checking';
 
   return (
     <div className="p-4 space-y-6">
       <h3 className="text-sm font-semibold">Settings</h3>
 
-      {/* Backend status */}
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs font-medium text-editor-text-muted">
           <Server className="w-3.5 h-3.5" />
@@ -79,17 +61,17 @@ export default function SettingsPanel() {
         </div>
         <div className="p-3 bg-editor-surface rounded-lg space-y-2">
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full shrink-0 ${statusColor}`} />
-            <span className="text-xs flex-1">{statusLabel}</span>
+            <BackendStatusDot status={backendStatus} />
+            <span className="text-xs flex-1">{BACKEND_STATUS_LABEL[backendStatus]}</span>
             <span className="text-[10px] text-editor-text-muted truncate max-w-[120px]">{backendUrl}</span>
           </div>
           <button
             onClick={handleStart}
-            disabled={restarting}
+            disabled={isChecking}
             className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-editor-accent hover:bg-editor-accent-hover disabled:opacity-50 text-white rounded transition-colors"
           >
-            <RefreshCw className={`w-3 h-3 ${restarting ? 'animate-spin' : ''}`} />
-            {restarting ? 'Starting…' : IS_ELECTRON ? 'Restart Backend' : 'Start Backend'}
+            <RefreshCw className={`w-3 h-3 ${isChecking ? 'animate-spin' : ''}`} />
+            {isChecking ? 'Connecting…' : IS_ELECTRON ? 'Restart Backend' : 'Start Backend'}
           </button>
         </div>
       </div>
