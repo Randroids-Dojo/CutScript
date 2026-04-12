@@ -2,13 +2,30 @@ import { useAIStore } from '../store/aiStore';
 import { useState, useEffect } from 'react';
 import type { AIProvider } from '../types/project';
 import { useEditorStore } from '../store/editorStore';
-import { Bot, Cloud, Brain, RefreshCw } from 'lucide-react';
+import { Bot, Cloud, Brain, RefreshCw, Server } from 'lucide-react';
+
+const IS_ELECTRON = !!window.electronAPI;
 
 export default function SettingsPanel() {
   const { providers, defaultProvider, setProviderConfig, setDefaultProvider } = useAIStore();
-  const { backendUrl } = useEditorStore();
+  const { backendUrl, backendStatus, setBackendStatus } = useEditorStore();
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+
+  const handleStart = async () => {
+    setRestarting(true);
+    setBackendStatus('checking');
+    try {
+      if (IS_ELECTRON) {
+        await window.electronAPI!.restartBackend();
+      } else {
+        await fetch('/api/start-backend', { method: 'POST' });
+      }
+    } finally {
+      setRestarting(false);
+    }
+  };
 
   const fetchOllamaModels = async () => {
     setLoadingModels(true);
@@ -41,9 +58,41 @@ export default function SettingsPanel() {
     claude: 'Claude (Anthropic)',
   };
 
+  const statusColor =
+    backendStatus === 'online' ? 'bg-green-500' :
+    backendStatus === 'offline' ? 'bg-red-500' :
+    'bg-yellow-500 animate-pulse';
+  const statusLabel =
+    backendStatus === 'online' ? 'Online' :
+    backendStatus === 'offline' ? 'Offline' :
+    'Connecting…';
+
   return (
     <div className="p-4 space-y-6">
-      <h3 className="text-sm font-semibold">AI Settings</h3>
+      <h3 className="text-sm font-semibold">Settings</h3>
+
+      {/* Backend status */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-xs font-medium text-editor-text-muted">
+          <Server className="w-3.5 h-3.5" />
+          Backend
+        </div>
+        <div className="p-3 bg-editor-surface rounded-lg space-y-2">
+          <div className="flex items-center gap-2">
+            <div className={`w-2 h-2 rounded-full shrink-0 ${statusColor}`} />
+            <span className="text-xs flex-1">{statusLabel}</span>
+            <span className="text-[10px] text-editor-text-muted truncate max-w-[120px]">{backendUrl}</span>
+          </div>
+          <button
+            onClick={handleStart}
+            disabled={restarting}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-editor-accent hover:bg-editor-accent-hover disabled:opacity-50 text-white rounded transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 ${restarting ? 'animate-spin' : ''}`} />
+            {restarting ? 'Starting…' : IS_ELECTRON ? 'Restart Backend' : 'Start Backend'}
+          </button>
+        </div>
+      </div>
 
       {/* Default provider selector */}
       <div className="space-y-2">

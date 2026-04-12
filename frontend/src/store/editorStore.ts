@@ -25,10 +25,12 @@ interface EditorState {
   exportProgress: number;
 
   backendUrl: string;
+  backendStatus: 'checking' | 'online' | 'offline';
 }
 
 interface EditorActions {
   setBackendUrl: (url: string) => void;
+  setBackendStatus: (status: 'checking' | 'online' | 'offline') => void;
   loadVideo: (path: string) => void;
   setTranscription: (result: TranscriptionResult) => void;
   setCurrentTime: (time: number) => void;
@@ -66,6 +68,7 @@ const initialState: EditorState = {
   isExporting: false,
   exportProgress: 0,
   backendUrl: 'http://localhost:8642',
+  backendStatus: 'checking',
 };
 
 let nextRangeId = 1;
@@ -76,6 +79,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       ...initialState,
 
       setBackendUrl: (url) => set({ backendUrl: url }),
+      setBackendStatus: (status) => set({ backendStatus: status }),
 
       loadVideo: (path) => {
         const backend = get().backendUrl;
