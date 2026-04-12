@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { Word, Segment, DeletedRange, TranscriptionResult } from '../types/project';
-import { diffTranscript } from '../utils/diffTranscript';
+import { diffTranscript, groupContiguousIndices } from '../utils/diffTranscript';
+import { buildDeletedSet } from '../utils/buildDeletedSet';
 
 interface EditorState {
   videoPath: string | null;
@@ -166,10 +167,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         const { words, deletedRanges, duration } = get();
         if (words.length === 0) return [{ start: 0, end: duration }];
 
-        const deletedSet = new Set<number>();
-        for (const range of deletedRanges) {
-          for (const idx of range.wordIndices) deletedSet.add(idx);
-        }
+        const deletedSet = buildDeletedSet(deletedRanges);
 
         const segments: Array<{ start: number; end: number }> = [];
         let segStart: number | null = null;
@@ -207,20 +205,17 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
       getTranscriptText: () => {
         const { segments, deletedRanges } = get();
-        const deletedSet = new Set<number>();
-        for (const range of deletedRanges) {
-          for (const idx of range.wordIndices) deletedSet.add(idx);
-        }
+        const deletedSet = buildDeletedSet(deletedRanges);
 
         const lines: string[] = [];
         for (const segment of segments) {
           const wordParts: string[] = [];
-          for (let localIdx = 0; localIdx < segment.words.length; localIdx++) {
+          segment.words.forEach((word, localIdx) => {
             const globalIdx = (segment.globalStartIndex ?? 0) + localIdx;
             if (!deletedSet.has(globalIdx)) {
-              wordParts.push(segment.words[localIdx].word.trim());
+              wordParts.push(word.word.trim());
             }
-          }
+          });
           if (wordParts.length === 0) continue;
           const line = segment.speaker
             ? `${segment.speaker}: ${wordParts.join(' ')}`
@@ -233,37 +228,20 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       applyPastedTranscript: (pastedText) => {
         const { words, deletedRanges } = get();
 
-        const alreadyDeletedSet = new Set<number>();
-        for (const range of deletedRanges) {
-          for (const idx of range.wordIndices) alreadyDeletedSet.add(idx);
-        }
-
-        const deletedIndices = diffTranscript(words, pastedText, alreadyDeletedSet);
+        const deletedIndices = diffTranscript(words, pastedText, buildDeletedSet(deletedRanges));
 
         if (deletedIndices.length === 0) {
           return { deletedCount: 0, rangeCount: 0 };
         }
 
-        // Group contiguous indices into DeletedRange objects
-        const newRanges: DeletedRange[] = [];
-        let groupStart = 0;
+        const groups = groupContiguousIndices(deletedIndices);
+        const newRanges: DeletedRange[] = groups.map((group) => ({
+          id: `dr_${nextRangeId++}`,
+          start: words[group[0]].start,
+          end: words[group[group.length - 1]].end,
+          wordIndices: group,
+        }));
 
-        for (let i = 1; i <= deletedIndices.length; i++) {
-          if (i === deletedIndices.length || deletedIndices[i] !== deletedIndices[i - 1] + 1) {
-            const group = deletedIndices.slice(groupStart, i);
-            const firstIdx = group[0];
-            const lastIdx = group[group.length - 1];
-            newRanges.push({
-              id: `dr_${nextRangeId++}`,
-              start: words[firstIdx].start,
-              end: words[lastIdx].end,
-              wordIndices: group,
-            });
-            groupStart = i;
-          }
-        }
-
-        // Single set() call = one undo step
         set({ deletedRanges: [...deletedRanges, ...newRanges] });
 
         return { deletedCount: deletedIndices.length, rangeCount: newRanges.length };

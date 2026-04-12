@@ -3,6 +3,7 @@ import { useEditorStore } from '../store/editorStore';
 import { Virtuoso } from 'react-virtuoso';
 import { Trash2, RotateCcw, Copy, ClipboardPaste } from 'lucide-react';
 import PasteTranscriptDialog from './PasteTranscriptDialog';
+import { buildDeletedSet } from '../utils/buildDeletedSet';
 
 export default function TranscriptEditor() {
   const words = useEditorStore((s) => s.words);
@@ -15,25 +16,24 @@ export default function TranscriptEditor() {
   const deleteSelectedWords = useEditorStore((s) => s.deleteSelectedWords);
   const restoreRange = useEditorStore((s) => s.restoreRange);
   const getWordAtTime = useEditorStore((s) => s.getWordAtTime);
-  const getTranscriptText = useEditorStore((s) => s.getTranscriptText);
 
   const selectionStart = useRef<number | null>(null);
   const wasDragging = useRef(false);
   const virtuosoRef = useRef<any>(null);
 
-  const deletedSet = useMemo(() => {
-    const s = new Set<number>();
-    for (const range of deletedRanges) {
-      for (const idx of range.wordIndices) s.add(idx);
-    }
-    return s;
-  }, [deletedRanges]);
+  const deletedSet = useMemo(() => buildDeletedSet(deletedRanges), [deletedRanges]);
 
   const selectedSet = useMemo(() => new Set(selectedWordIndices), [selectedWordIndices]);
 
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const [copied, setCopied] = useState(false);
   const [showPasteDialog, setShowPasteDialog] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   useEffect(() => {
     if (words.length === 0) return;
@@ -173,11 +173,10 @@ export default function TranscriptEditor() {
   );
 
   const handleCopy = useCallback(async () => {
-    const text = getTranscriptText();
+    const text = useEditorStore.getState().getTranscriptText();
     await navigator.clipboard.writeText(text);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [getTranscriptText]);
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">

@@ -5,6 +5,24 @@ function normalizeWord(w: string): string {
 }
 
 /**
+ * Groups a sorted array of integers into contiguous runs.
+ * e.g. [1,2,3,7,8,10] → [[1,2,3],[7,8],[10]]
+ * Input must be sorted ascending; unsorted input produces incorrect groups.
+ */
+export function groupContiguousIndices(indices: number[]): number[][] {
+  if (indices.length === 0) return [];
+  const groups: number[][] = [];
+  let groupStart = 0;
+  for (let i = 1; i <= indices.length; i++) {
+    if (i === indices.length || indices[i] !== indices[i - 1] + 1) {
+      groups.push(indices.slice(groupStart, i));
+      groupStart = i;
+    }
+  }
+  return groups;
+}
+
+/**
  * Diffs an original word list against pasted text using LCS to find deleted words.
  * Only detects deletions — modified words are treated as delete+insert and are ignored.
  *
@@ -18,7 +36,6 @@ export function diffTranscript(
   pastedText: string,
   alreadyDeletedIndices: Set<number>,
 ): number[] {
-  // Build list of active (non-deleted) words with their global indices
   const activeWords: Array<{ globalIndex: number; normalized: string }> = [];
   for (let i = 0; i < originalWords.length; i++) {
     if (!alreadyDeletedIndices.has(i)) {
@@ -29,13 +46,11 @@ export function diffTranscript(
     }
   }
 
-  // Tokenize the pasted text
   const pastedTokens = pastedText
     .split(/\s+/)
     .map(normalizeWord)
     .filter((w) => w.length > 0);
 
-  // If paste is empty, mark all active words as deleted
   if (pastedTokens.length === 0) {
     return activeWords.map((w) => w.globalIndex);
   }
@@ -43,9 +58,8 @@ export function diffTranscript(
   const n = activeWords.length;
   const m = pastedTokens.length;
 
-  // LCS dynamic programming table
-  // Using a flat Uint16Array for performance on large transcripts
-  const dp = new Uint16Array((n + 1) * (m + 1));
+  // Uint32Array supports transcripts up to ~4B words; Uint16 would overflow at 65k.
+  const dp = new Uint32Array((n + 1) * (m + 1));
 
   for (let i = 1; i <= n; i++) {
     for (let j = 1; j <= m; j++) {
@@ -59,8 +73,7 @@ export function diffTranscript(
     }
   }
 
-  // Backtrack to find which active word indices are in the LCS
-  const inLCS = new Set<number>(); // indices into activeWords array
+  const inLCS = new Set<number>();
   let i = n;
   let j = m;
   while (i > 0 && j > 0) {
@@ -75,7 +88,6 @@ export function diffTranscript(
     }
   }
 
-  // Any active word not in the LCS is deleted
   const deletedIndices: number[] = [];
   for (let k = 0; k < activeWords.length; k++) {
     if (!inLCS.has(k)) {

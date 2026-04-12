@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { Download, Loader2, Zap, Cog, Info } from 'lucide-react';
 import type { ExportOptions } from '../types/project';
+import { buildDeletedSet } from '../utils/buildDeletedSet';
 
 export default function ExportDialog() {
   const { videoPath, words, deletedRanges, isExporting, exportProgress, backendUrl, setExporting, getKeepSegments } =
@@ -34,10 +35,7 @@ export default function ExportDialog() {
     try {
       const keepSegments = getKeepSegments();
 
-      const deletedSet = new Set<number>();
-      for (const range of deletedRanges) {
-        for (const idx of range.wordIndices) deletedSet.add(idx);
-      }
+      const deletedSet = buildDeletedSet(deletedRanges);
 
       const res = await fetch(`${backendUrl}/export`, {
         method: 'POST',

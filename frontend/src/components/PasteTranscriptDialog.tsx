@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useEditorStore } from '../store/editorStore';
-import { diffTranscript } from '../utils/diffTranscript';
+import { diffTranscript, groupContiguousIndices } from '../utils/diffTranscript';
+import { buildDeletedSet } from '../utils/buildDeletedSet';
 
 interface Props {
   onClose: () => void;
@@ -20,30 +21,27 @@ export default function PasteTranscriptDialog({ onClose }: Props) {
 
   const [pastedText, setPastedText] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
     if (pastedText.trim() === '') {
       setPreview(null);
       return;
     }
 
-    const alreadyDeletedSet = new Set<number>();
-    for (const range of deletedRanges) {
-      for (const idx of range.wordIndices) alreadyDeletedSet.add(idx);
-    }
+    debounceRef.current = setTimeout(() => {
+      const alreadyDeletedSet = buildDeletedSet(deletedRanges);
+      const totalActive = words.length - alreadyDeletedSet.size;
+      const deletedIndices = diffTranscript(words, pastedText, alreadyDeletedSet);
+      const rangeCount = groupContiguousIndices(deletedIndices).length;
+      setPreview({ deletedCount: deletedIndices.length, rangeCount, totalActive });
+    }, 300);
 
-    const totalActive = words.length - alreadyDeletedSet.size;
-    const deletedIndices = diffTranscript(words, pastedText, alreadyDeletedSet);
-
-    let rangeCount = 0;
-    if (deletedIndices.length > 0) {
-      rangeCount = 1;
-      for (let i = 1; i < deletedIndices.length; i++) {
-        if (deletedIndices[i] !== deletedIndices[i - 1] + 1) rangeCount++;
-      }
-    }
-
-    setPreview({ deletedCount: deletedIndices.length, rangeCount, totalActive });
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [pastedText, words, deletedRanges]);
 
   const handleApply = () => {
@@ -55,9 +53,9 @@ export default function PasteTranscriptDialog({ onClose }: Props) {
     if (e.target === e.currentTarget) onClose();
   };
 
-  const allDeleted = preview && preview.deletedCount === preview.totalActive;
-  const noChanges = preview && preview.deletedCount === 0;
-  const percent = preview && preview.totalActive > 0
+  const allDeleted = preview !== null && preview.deletedCount === preview.totalActive;
+  const noChanges = preview !== null && preview.deletedCount === 0;
+  const percent = preview !== null && preview.totalActive > 0
     ? Math.round((preview.deletedCount / preview.totalActive) * 100)
     : 0;
 
@@ -122,7 +120,7 @@ export default function PasteTranscriptDialog({ onClose }: Props) {
           </button>
           <button
             onClick={handleApply}
-            disabled={!preview || preview.deletedCount === 0 || !!allDeleted}
+            disabled={!preview || noChanges || allDeleted}
             className="px-3 py-1.5 text-xs bg-editor-accent text-white rounded hover:bg-editor-accent/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Apply Cuts
