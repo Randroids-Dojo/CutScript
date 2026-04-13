@@ -1,7 +1,9 @@
 import { useCallback, useRef, useEffect, useMemo, useState } from 'react';
 import { useEditorStore } from '../store/editorStore';
 import { Virtuoso } from 'react-virtuoso';
-import { Trash2, RotateCcw } from 'lucide-react';
+import { Trash2, RotateCcw, Copy, ClipboardPaste } from 'lucide-react';
+import PasteTranscriptDialog from './PasteTranscriptDialog';
+import { buildDeletedSet } from '../utils/buildDeletedSet';
 
 export default function TranscriptEditor() {
   const words = useEditorStore((s) => s.words);
@@ -19,17 +21,19 @@ export default function TranscriptEditor() {
   const wasDragging = useRef(false);
   const virtuosoRef = useRef<any>(null);
 
-  const deletedSet = useMemo(() => {
-    const s = new Set<number>();
-    for (const range of deletedRanges) {
-      for (const idx of range.wordIndices) s.add(idx);
-    }
-    return s;
-  }, [deletedRanges]);
+  const deletedSet = useMemo(() => buildDeletedSet(deletedRanges), [deletedRanges]);
 
   const selectedSet = useMemo(() => new Set(selectedWordIndices), [selectedWordIndices]);
 
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
+  const [copied, setCopied] = useState(false);
+  const [showPasteDialog, setShowPasteDialog] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   useEffect(() => {
     if (words.length === 0) return;
@@ -168,12 +172,38 @@ export default function TranscriptEditor() {
     [segments, deletedSet, selectedSet, activeWordIndex, hoveredWordIndex, handleWordMouseDown, handleWordMouseEnter, setHoveredWordIndex, getRangeForWord, restoreRange],
   );
 
+  const handleCopy = useCallback(async () => {
+    const text = useEditorStore.getState().getTranscriptText();
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+  }, []);
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex items-center gap-2 px-4 py-2 border-b border-editor-border shrink-0">
         <span className="text-xs text-editor-text-muted flex-1">
           {words.length} words &middot; {deletedRanges.length} cuts
         </span>
+        {words.length > 0 && (
+          <>
+            <button
+              onClick={handleCopy}
+              title="Copy transcript"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-editor-text-muted hover:text-editor-text border border-editor-border rounded hover:bg-editor-bg transition-colors"
+            >
+              <Copy className="w-3 h-3" />
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+            <button
+              onClick={() => setShowPasteDialog(true)}
+              title="Paste edited transcript"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-editor-text-muted hover:text-editor-text border border-editor-border rounded hover:bg-editor-bg transition-colors"
+            >
+              <ClipboardPaste className="w-3 h-3" />
+              Paste edits
+            </button>
+          </>
+        )}
         {selectedWordIndices.length > 0 && (
           <button
             onClick={deleteSelectedWords}
@@ -199,6 +229,9 @@ export default function TranscriptEditor() {
           style={{ height: '100%' }}
         />
       </div>
+      {showPasteDialog && (
+        <PasteTranscriptDialog onClose={() => setShowPasteDialog(false)} />
+      )}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { Word, Segment, DeletedRange, TranscriptionResult, BackendStatus } from '../types/project';
+import { diffTranscript, groupContiguousIndices } from '../utils/diffTranscript';
+import { buildDeletedSet } from '../utils/buildDeletedSet';
 
 interface EditorState {
   videoPath: string | null;
@@ -43,6 +45,8 @@ interface EditorActions {
   setExporting: (active: boolean, progress?: number) => void;
   getKeepSegments: () => Array<{ start: number; end: number }>;
   getWordAtTime: (time: number) => number;
+  getTranscriptText: () => string;
+  applyPastedTranscript: (pastedText: string) => { deletedCount: number; rangeCount: number };
   loadProject: (projectData: any) => void;
   reset: () => void;
 }
@@ -167,10 +171,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
         const { words, deletedRanges, duration } = get();
         if (words.length === 0) return [{ start: 0, end: duration }];
 
-        const deletedSet = new Set<number>();
-        for (const range of deletedRanges) {
-          for (const idx of range.wordIndices) deletedSet.add(idx);
-        }
+        const deletedSet = buildDeletedSet(deletedRanges);
 
         const segments: Array<{ start: number; end: number }> = [];
         let segStart: number | null = null;
@@ -204,6 +205,50 @@ export const useEditorStore = create<EditorState & EditorActions>()(
           else return mid;
         }
         return lo < words.length ? lo : words.length - 1;
+      },
+
+      getTranscriptText: () => {
+        const { segments, deletedRanges } = get();
+        const deletedSet = buildDeletedSet(deletedRanges);
+
+        const lines: string[] = [];
+        for (const segment of segments) {
+          const wordParts: string[] = [];
+          segment.words.forEach((word, localIdx) => {
+            const globalIdx = (segment.globalStartIndex ?? 0) + localIdx;
+            if (!deletedSet.has(globalIdx)) {
+              wordParts.push(word.word.trim());
+            }
+          });
+          if (wordParts.length === 0) continue;
+          const line = segment.speaker
+            ? `${segment.speaker}: ${wordParts.join(' ')}`
+            : wordParts.join(' ');
+          lines.push(line);
+        }
+        return lines.join('\n');
+      },
+
+      applyPastedTranscript: (pastedText) => {
+        const { words, deletedRanges } = get();
+
+        const deletedIndices = diffTranscript(words, pastedText, buildDeletedSet(deletedRanges));
+
+        if (deletedIndices.length === 0) {
+          return { deletedCount: 0, rangeCount: 0 };
+        }
+
+        const groups = groupContiguousIndices(deletedIndices);
+        const newRanges: DeletedRange[] = groups.map((group) => ({
+          id: `dr_${nextRangeId++}`,
+          start: words[group[0]].start,
+          end: words[group[group.length - 1]].end,
+          wordIndices: group,
+        }));
+
+        set({ deletedRanges: [...deletedRanges, ...newRanges] });
+
+        return { deletedCount: deletedIndices.length, rangeCount: newRanges.length };
       },
 
       loadProject: (data) => {
