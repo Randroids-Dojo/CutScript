@@ -1,7 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { useEditorStore } from '../store/editorStore';
-import { Download, Loader2, Zap, Cog, Info } from 'lucide-react';
+import { Download, Loader2, Zap, Cog, Info, Check } from 'lucide-react';
 import type { ExportOptions } from '../types/project';
+import { buildDeletedSet } from '../utils/buildDeletedSet';
+import { exportToFile } from '../utils/exportToFile';
 
 export default function ExportDialog() {
   const { videoPath, words, deletedRanges, isExporting, exportProgress, backendUrl, setExporting, getKeepSegments } =
@@ -16,48 +18,47 @@ export default function ExportDialog() {
     enhanceAudio: false,
     captions: 'none',
   });
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const handleExport = useCallback(async () => {
     if (!videoPath) return;
 
-    const outputPath = await window.electronAPI?.saveFile({
-      defaultPath: videoPath.replace(/\.[^.]+$/, '_edited.mp4'),
-      filters: [
-        { name: 'MP4', extensions: ['mp4'] },
-        { name: 'MOV', extensions: ['mov'] },
-        { name: 'WebM', extensions: ['webm'] },
-      ],
-    });
-    if (!outputPath) return;
+    setExportSuccess(false);
+    setExportError('');
 
-    setExporting(true, 0);
     try {
       const keepSegments = getKeepSegments();
+      const deletedSet = buildDeletedSet(deletedRanges);
 
-      const deletedSet = new Set<number>();
-      for (const range of deletedRanges) {
-        for (const idx of range.wordIndices) deletedSet.add(idx);
-      }
+      const suggestedName = videoPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') + `_edited.${options.format}`;
 
-      const res = await fetch(`${backendUrl}/export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const ok = await exportToFile({
+        backendUrl,
+        suggestedName,
+        format: options.format as 'mp4' | 'mov' | 'webm',
+        electronDefaultPath: videoPath.replace(/\.[^.]+$/, `_edited.${options.format}`),
+        body: {
           input_path: videoPath,
-          output_path: outputPath,
           keep_segments: keepSegments,
           words: options.captions !== 'none' ? words : undefined,
           deleted_indices: options.captions !== 'none' ? [...deletedSet] : undefined,
           ...options,
-        }),
+        },
+        onStart: () => setExporting(true, 0),
       });
-      if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
-      setExporting(false, 100);
+
+      if (ok) {
+        setExporting(false, 100);
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 3000);
+      }
     } catch (err) {
       console.error('Export error:', err);
+      setExportError(String(err));
       setExporting(false);
     }
-  }, [videoPath, options, backendUrl, setExporting, getKeepSegments]);
+  }, [videoPath, options, backendUrl, setExporting, getKeepSegments, deletedRanges, words]);
 
   return (
     <div className="p-4 space-y-5">
@@ -144,6 +145,11 @@ export default function ExportDialog() {
             <Loader2 className="w-4 h-4 animate-spin" />
             Exporting... {Math.round(exportProgress)}%
           </>
+        ) : exportSuccess ? (
+          <>
+            <Check className="w-4 h-4" />
+            Saved!
+          </>
         ) : (
           <>
             <Download className="w-4 h-4" />
@@ -151,6 +157,9 @@ export default function ExportDialog() {
           </>
         )}
       </button>
+      {exportError && (
+        <p className="text-[10px] text-editor-danger text-center">{exportError}</p>
+      )}
 
       {options.mode === 'fast' && !hasCuts && (
         <p className="text-[10px] text-editor-text-muted text-center">

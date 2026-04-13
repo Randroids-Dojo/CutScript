@@ -5,7 +5,8 @@ import tempfile
 import os
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from services.video_editor import export_stream_copy, export_reencode, export_reencode_with_subs
@@ -30,7 +31,7 @@ class ExportWordModel(BaseModel):
 
 class ExportRequest(BaseModel):
     input_path: str
-    output_path: str
+    output_path: str = ""  # empty = browser mode: stream file back to client
     keep_segments: List[SegmentModel]
     mode: str = "fast"
     resolution: str = "1080p"
@@ -61,24 +62,31 @@ def _mux_audio(video_path: str, audio_path: str, output_path: str) -> str:
 
 
 @router.post("/export")
-async def export_video(req: ExportRequest):
+async def export_video(req: ExportRequest, background_tasks: BackgroundTasks):
     try:
         segments = [{"start": s.start, "end": s.end} for s in req.keep_segments]
 
         if not segments:
             raise HTTPException(status_code=400, detail="No segments to export")
 
-        use_stream_copy = req.mode == "fast" and len(segments) == 1
-        needs_reencode_for_subs = req.captions == "burn-in"
+        browser_mode = not req.output_path
 
-        # Burn-in captions require re-encode
-        if needs_reencode_for_subs:
+        # In browser mode, write to a temp file and stream it back to the client.
+        if browser_mode:
+            suffix = f".{req.format}" if req.format else ".mp4"
+            tmp_out = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            tmp_out.close()
+            output_path = tmp_out.name
+        else:
+            output_path = req.output_path
+
+        use_stream_copy = req.mode == "fast" and len(segments) == 1
+        if req.captions == "burn-in":
             use_stream_copy = False
 
         words_dicts = [w.model_dump() for w in req.words] if req.words else []
         deleted_set = set(req.deleted_indices or [])
 
-        # Generate ASS file for burn-in
         ass_path = None
         if req.captions == "burn-in" and words_dicts:
             ass_content = generate_ass(words_dicts, deleted_set)
@@ -89,11 +97,11 @@ async def export_video(req: ExportRequest):
 
         try:
             if use_stream_copy:
-                output = export_stream_copy(req.input_path, req.output_path, segments)
+                output = export_stream_copy(req.input_path, output_path, segments)
             elif ass_path:
                 output = export_reencode_with_subs(
                     req.input_path,
-                    req.output_path,
+                    output_path,
                     segments,
                     ass_path,
                     resolution=req.resolution,
@@ -102,29 +110,27 @@ async def export_video(req: ExportRequest):
             else:
                 output = export_reencode(
                     req.input_path,
-                    req.output_path,
+                    output_path,
                     segments,
                     resolution=req.resolution,
                     format_hint=req.format,
                 )
         finally:
-            if ass_path and os.path.exists(ass_path):
-                os.unlink(ass_path)
+            if ass_path:
+                try:
+                    os.unlink(ass_path)
+                except FileNotFoundError:
+                    pass
 
-        # Audio enhancement: clean, then mux back into the exported video
         if req.enhanceAudio:
             try:
                 tmp_dir = tempfile.mkdtemp(prefix="cutscript_audio_")
                 cleaned_audio = os.path.join(tmp_dir, "cleaned.wav")
                 clean_audio(output, cleaned_audio)
-
                 muxed_path = output + ".muxed.mp4"
                 _mux_audio(output, cleaned_audio, muxed_path)
-
                 os.replace(muxed_path, output)
                 logger.info(f"Audio enhanced and muxed into {output}")
-
-                # Cleanup
                 try:
                     os.remove(cleaned_audio)
                     os.rmdir(tmp_dir)
@@ -133,7 +139,11 @@ async def export_video(req: ExportRequest):
             except Exception as e:
                 logger.warning(f"Audio enhancement failed (non-fatal): {e}")
 
-        # Sidecar SRT: generate and save alongside video
+        if browser_mode:
+            suggested = os.path.splitext(os.path.basename(req.input_path))[0] + "_edited" + suffix
+            background_tasks.add_task(os.unlink, output)
+            return FileResponse(output, filename=suggested, media_type=f"video/{req.format or 'mp4'}")
+
         srt_path = None
         if req.captions == "sidecar" and words_dicts:
             srt_content = generate_srt(words_dicts, deleted_set)

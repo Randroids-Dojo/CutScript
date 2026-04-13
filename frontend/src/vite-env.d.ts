@@ -14,4 +14,9 @@ interface ElectronAPI {
 
 interface Window {
   electronAPI?: ElectronAPI;
+  showOpenFilePicker: (options?: {
+    types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+    excludeAcceptAllOption?: boolean;
+    multiple?: boolean;
+  }) => Promise<FileSystemFileHandle[]>;
 }

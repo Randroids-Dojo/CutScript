@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useEditorStore } from './store/editorStore';
 import VideoPlayer from './components/VideoPlayer';
 import TranscriptEditor from './components/TranscriptEditor';
@@ -16,7 +16,6 @@ import {
   Sparkles,
   Download,
   Loader2,
-  FolderSearch,
   FileInput,
 } from 'lucide-react';
 
@@ -38,9 +37,8 @@ export default function App() {
   } = useEditorStore();
 
   const [activePanel, setActivePanel] = useState<Panel>(null);
-  const [manualPath, setManualPath] = useState('');
   const [whisperModel, setWhisperModel] = useState('base');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   useKeyboardShortcuts();
 
@@ -89,21 +87,56 @@ export default function App() {
         await transcribeVideo(path);
       }
     } else {
-      // Browser: use the manual path input
-      const path = manualPath.trim();
-      if (path) {
-        loadVideo(path);
-        await transcribeVideo(path);
-      }
+      await handleBrowserOpenFile();
     }
   };
 
-  const handleManualSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const path = manualPath.trim();
-    if (!path) return;
-    loadVideo(path);
-    await transcribeVideo(path);
+  const handleBrowserOpenFile = async () => {
+    let fileHandle: FileSystemFileHandle;
+    try {
+      [fileHandle] = await window.showOpenFilePicker({
+        types: [{
+          description: 'Video / Audio',
+          accept: {
+            'video/*': ['.mp4', '.avi', '.mov', '.mkv', '.webm'],
+            'audio/*': ['.m4a', '.wav', '.mp3', '.flac'],
+          },
+        }],
+      });
+    } catch {
+      return; // user cancelled
+    }
+
+    const file = await fileHandle.getFile();
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploadProgress(0);
+    try {
+      const xhr = new XMLHttpRequest();
+      const uploadPath = await new Promise<string>((resolve, reject) => {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText).file_path);
+          } else {
+            reject(new Error(`Upload failed: ${xhr.statusText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Upload failed'));
+        xhr.open('POST', `${backendUrl}/upload`);
+        xhr.send(formData);
+      });
+      loadVideo(uploadPath);
+      await transcribeVideo(uploadPath);
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert(`Upload failed: ${err}`);
+    } finally {
+      setUploadProgress(null);
+    }
   };
 
   const transcribeVideo = async (path: string) => {
@@ -173,35 +206,25 @@ export default function App() {
             </button>
           </div>
         ) : (
-          /* Browser: manual path input */
-          <div className="w-full max-w-lg space-y-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-editor-warning/10 border border-editor-warning/30 rounded-lg">
-              <span className="text-editor-warning text-xs">
-                Running in browser — paste the full path to your video file below.
-              </span>
-            </div>
-            <form onSubmit={handleManualSubmit} className="flex gap-2">
-              <div className="flex-1 relative">
-                <FolderSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-editor-text-muted pointer-events-none" />
-                <input
-                  ref={fileInputRef}
-                  type="text"
-                  value={manualPath}
-                  onChange={(e) => setManualPath(e.target.value)}
-                  placeholder="C:\Videos\my-video.mp4"
-                  className="w-full pl-9 pr-3 py-2.5 bg-editor-surface border border-editor-border rounded-lg text-sm text-editor-text placeholder:text-editor-text-muted/40 focus:outline-none focus:border-editor-accent"
-                  autoFocus
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={!manualPath.trim()}
-                className="flex items-center gap-2 px-5 py-2.5 bg-editor-accent hover:bg-editor-accent-hover disabled:opacity-40 rounded-lg text-sm text-white font-medium transition-colors whitespace-nowrap"
-              >
-                <Film className="w-4 h-4" />
-                Load &amp; Transcribe
-              </button>
-            </form>
+          /* Browser: File System Access API */
+          <div className="flex flex-col items-center gap-3">
+            <button
+              onClick={handleBrowserOpenFile}
+              disabled={uploadProgress !== null}
+              className="flex items-center gap-2 px-6 py-3 bg-editor-accent hover:bg-editor-accent-hover disabled:opacity-60 rounded-lg text-white font-medium transition-colors"
+            >
+              {uploadProgress !== null ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Uploading… {uploadProgress}%
+                </>
+              ) : (
+                <>
+                  <FolderOpen className="w-5 h-5" />
+                  Open Video File
+                </>
+              )}
+            </button>
             <p className="text-[11px] text-editor-text-muted text-center">
               Supported: MP4, AVI, MOV, MKV, WebM, M4A
             </p>
