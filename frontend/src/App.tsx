@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useStore } from 'zustand';
 import { useEditorStore } from './store/editorStore';
 import VideoPlayer from './components/VideoPlayer';
 import TranscriptEditor from './components/TranscriptEditor';
@@ -17,6 +18,8 @@ import {
   Download,
   Loader2,
   FileInput,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 type Panel = 'ai' | 'settings' | 'export' | null;
@@ -35,6 +38,15 @@ export default function App() {
     backendStatus,
     setBackendStatus,
   } = useEditorStore();
+
+  const { pastStates, futureStates } = useStore(useEditorStore.temporal, (s) => ({
+    pastStates: s.pastStates,
+    futureStates: s.futureStates,
+  }));
+  const canUndo = pastStates.length > 0;
+  const canRedo = futureStates.length > 0;
+  const handleUndo = useCallback(() => useEditorStore.temporal.getState().undo(), []);
+  const handleRedo = useCallback(() => useEditorStore.temporal.getState().redo(), []);
 
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [whisperModel, setWhisperModel] = useState('base');
@@ -249,6 +261,18 @@ export default function App() {
             icon={<FolderOpen className="w-4 h-4" />}
             label="Open"
             onClick={IS_ELECTRON ? handleOpenFile : () => useEditorStore.getState().reset()}
+          />
+          <ToolbarButton
+            icon={<Undo2 className="w-4 h-4" />}
+            label="Undo"
+            onClick={handleUndo}
+            disabled={!canUndo}
+          />
+          <ToolbarButton
+            icon={<Redo2 className="w-4 h-4" />}
+            label="Redo"
+            onClick={handleRedo}
+            disabled={!canRedo}
           />
           <ToolbarButton
             icon={<Sparkles className="w-4 h-4" />}
