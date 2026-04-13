@@ -90,6 +90,7 @@ export default function App() {
       const content = await window.electronAPI!.readFile(projectPath);
       const data = JSON.parse(content);
       useEditorStore.getState().loadProject(data);
+      useEditorStore.temporal.getState().clear();
     } catch (err) {
       console.error('Failed to load project:', err);
       alert(`Failed to load project: ${err}`);
@@ -197,6 +198,7 @@ export default function App() {
     } finally {
       setTranscribing(false);
       setTranscriptionLabel('');
+      useEditorStore.temporal.getState().clear();
     }
   };
 
