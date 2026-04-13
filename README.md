@@ -18,7 +18,7 @@ An open-source, local-first, Descript-like text-based audio and video editor pow
 ### Prerequisites
 
 - Node.js 18+
-- Python 3.10+
+- Python 3.11 ([uv](https://docs.astral.sh/uv/) handles the install automatically)
 - FFmpeg (in PATH)
 - (Optional) Ollama for local AI features
 
@@ -31,8 +31,8 @@ npm install
 # Frontend dependencies (React, Tailwind, Zustand)
 cd frontend && npm install && cd ..
 
-# Backend dependencies
-cd backend && pip install -r requirements.txt && cd ..
+# Backend dependencies (downloads Python 3.11, creates venv, installs deps)
+cd backend && uv sync && cd ..
 ```
 
 ### Run (Development)
@@ -46,7 +46,7 @@ Or run them separately:
 
 ```bash
 # Terminal 1: Backend
-cd backend && python -m uvicorn main:app --reload --port 8642
+cd backend && uv run uvicorn main:app --reload --port 8642
 
 # Terminal 2: Frontend
 cd frontend && npm run dev
