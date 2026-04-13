@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useAutoReset } from '../hooks/useAutoReset';
 import { useEditorStore } from '../store/editorStore';
 import { Download, Loader2, Zap, Cog, Info, Check } from 'lucide-react';
 import type { ExportOptions } from '../types/project';
@@ -18,8 +19,8 @@ export default function ExportDialog() {
     enhanceAudio: false,
     captions: 'none',
   });
-  const [exportSuccess, setExportSuccess] = useState(false);
-  const [exportError, setExportError] = useState('');
+  const [exportSuccess, setExportSuccess] = useAutoReset(false, 3000);
+  const [exportError, setExportError] = useAutoReset('', 3000);
 
   const handleExport = useCallback(async () => {
     if (!videoPath) return;
@@ -51,7 +52,6 @@ export default function ExportDialog() {
       if (ok) {
         setExporting(false, 100);
         setExportSuccess(true);
-        setTimeout(() => setExportSuccess(false), 3000);
       }
     } catch (err) {
       console.error('Export error:', err);

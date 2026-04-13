@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from 'zustand';
+import { useShallow } from 'zustand/shallow';
 import { useEditorStore } from './store/editorStore';
 import VideoPlayer from './components/VideoPlayer';
 import TranscriptEditor from './components/TranscriptEditor';
@@ -39,10 +40,10 @@ export default function App() {
     setBackendStatus,
   } = useEditorStore();
 
-  const { pastStates, futureStates } = useStore(useEditorStore.temporal, (s) => ({
+  const { pastStates, futureStates } = useStore(useEditorStore.temporal, useShallow((s) => ({
     pastStates: s.pastStates,
     futureStates: s.futureStates,
-  }));
+  })));
   const canUndo = pastStates.length > 0;
   const canRedo = futureStates.length > 0;
   const handleUndo = useCallback(() => useEditorStore.temporal.getState().undo(), []);

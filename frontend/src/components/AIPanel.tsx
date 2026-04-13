@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useAutoReset } from '../hooks/useAutoReset';
 import { useEditorStore } from '../store/editorStore';
 import { useAIStore } from '../store/aiStore';
 import { Sparkles, Scissors, Film, Loader2, Check, X, Play, Download } from 'lucide-react';
@@ -119,8 +120,8 @@ export default function AIPanel() {
   }, [clipSuggestions, deletedRanges, getKeepSegments]);
 
   const [exportingClipIndex, setExportingClipIndex] = useState<number | null>(null);
-  const [exportedClipIndex, setExportedClipIndex] = useState<number | null>(null);
-  const [exportClipError, setExportClipError] = useState<string | null>(null);
+  const [exportedClipIndex, setExportedClipIndex] = useAutoReset<number | null>(null, 3000);
+  const [exportClipError, setExportClipError] = useAutoReset<string | null>(null, 3000);
 
   const handleExportClip = useCallback(
     async (clip: ClipSuggestion, index: number, keepSegments: Array<{ start: number; end: number }>) => {
@@ -142,12 +143,10 @@ export default function AIPanel() {
         });
         if (saved) {
           setExportedClipIndex(index);
-          setTimeout(() => setExportedClipIndex(null), 3000);
         }
       } catch (err) {
         console.error(err);
         setExportClipError('Export failed');
-        setTimeout(() => setExportClipError(null), 3000);
       } finally {
         setExportingClipIndex(null);
       }
