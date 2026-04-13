@@ -6,6 +6,8 @@ import WaveformTimeline from './components/WaveformTimeline';
 import AIPanel from './components/AIPanel';
 import ExportDialog from './components/ExportDialog';
 import SettingsPanel from './components/SettingsPanel';
+import BackendStatusDot from './components/BackendStatusDot';
+import { IS_ELECTRON } from './utils/env';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import {
   Film,
@@ -17,8 +19,6 @@ import {
   FolderSearch,
   FileInput,
 } from 'lucide-react';
-
-const IS_ELECTRON = !!window.electronAPI;
 
 type Panel = 'ai' | 'settings' | 'export' | null;
 
@@ -33,6 +33,8 @@ export default function App() {
     setTranscription,
     setTranscribing,
     backendUrl,
+    backendStatus,
+    setBackendStatus,
   } = useEditorStore();
 
   const [activePanel, setActivePanel] = useState<Panel>(null);
@@ -47,6 +49,23 @@ export default function App() {
       window.electronAPI!.getBackendUrl().then(setBackendUrl);
     }
   }, [setBackendUrl]);
+
+  // Health-check polling: 1s when offline, 5s when online
+  useEffect(() => {
+    let id: ReturnType<typeof setTimeout>;
+    const check = async () => {
+      try {
+        const res = await fetch(`${backendUrl}/health`);
+        setBackendStatus(res.ok ? 'online' : 'offline');
+      } catch {
+        setBackendStatus('offline');
+      }
+      const delay = useEditorStore.getState().backendStatus === 'online' ? 5000 : 1000;
+      id = setTimeout(check, delay);
+    };
+    check();
+    return () => clearTimeout(id);
+  }, [backendUrl, setBackendStatus]);
 
   const handleLoadProject = async () => {
     if (!IS_ELECTRON) return;
@@ -228,6 +247,7 @@ export default function App() {
             active={activePanel === 'settings'}
             onClick={() => togglePanel('settings')}
           />
+          <BackendStatusDot status={backendStatus} className="ml-2" />
         </div>
       </header>
 

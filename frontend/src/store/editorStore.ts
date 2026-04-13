@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
-import type { Word, Segment, DeletedRange, TranscriptionResult } from '../types/project';
+import type { Word, Segment, DeletedRange, TranscriptionResult, BackendStatus } from '../types/project';
 
 interface EditorState {
   videoPath: string | null;
@@ -23,10 +23,12 @@ interface EditorState {
   exportProgress: number;
 
   backendUrl: string;
+  backendStatus: BackendStatus;
 }
 
 interface EditorActions {
   setBackendUrl: (url: string) => void;
+  setBackendStatus: (status: BackendStatus) => void;
   loadVideo: (path: string) => void;
   setTranscription: (result: TranscriptionResult) => void;
   setCurrentTime: (time: number) => void;
@@ -62,6 +64,7 @@ const initialState: EditorState = {
   isExporting: false,
   exportProgress: 0,
   backendUrl: 'http://localhost:8642',
+  backendStatus: 'checking',
 };
 
 let nextRangeId = 1;
@@ -72,6 +75,7 @@ export const useEditorStore = create<EditorState & EditorActions>()(
       ...initialState,
 
       setBackendUrl: (url) => set({ backendUrl: url }),
+      setBackendStatus: (status) => set({ backendStatus: status }),
 
       loadVideo: (path) => {
         const backend = get().backendUrl;

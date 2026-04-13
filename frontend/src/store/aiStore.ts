@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AIProvider, AIProviderConfig, FillerWordResult, ClipSuggestion } from '../types/project';
+import { IS_ELECTRON } from '../utils/env';
 
 const ENCRYPTED_KEY_PREFIX = 'aive_enc_';
 
@@ -30,8 +31,8 @@ async function encryptAndStore(key: string, value: string): Promise<void> {
     localStorage.removeItem(ENCRYPTED_KEY_PREFIX + key);
     return;
   }
-  if (window.electronAPI) {
-    const encrypted = await window.electronAPI.encryptString(value);
+  if (IS_ELECTRON) {
+    const encrypted = await window.electronAPI!.encryptString(value);
     localStorage.setItem(ENCRYPTED_KEY_PREFIX + key, encrypted);
   } else {
     localStorage.setItem(ENCRYPTED_KEY_PREFIX + key, btoa(value));
@@ -41,9 +42,9 @@ async function encryptAndStore(key: string, value: string): Promise<void> {
 async function loadAndDecrypt(key: string): Promise<string> {
   const stored = localStorage.getItem(ENCRYPTED_KEY_PREFIX + key);
   if (!stored) return '';
-  if (window.electronAPI) {
+  if (IS_ELECTRON) {
     try {
-      return await window.electronAPI.decryptString(stored);
+      return await window.electronAPI!.decryptString(stored);
     } catch {
       return '';
     }
