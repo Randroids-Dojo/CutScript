@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import { useStore } from 'zustand';
 import { useEditorStore } from './store/editorStore';
 import VideoPlayer from './components/VideoPlayer';
 import TranscriptEditor from './components/TranscriptEditor';
@@ -16,6 +17,8 @@ import {
   Loader2,
   FolderSearch,
   FileInput,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 const IS_ELECTRON = !!window.electronAPI;
@@ -34,6 +37,15 @@ export default function App() {
     setTranscribing,
     backendUrl,
   } = useEditorStore();
+
+  const { pastStates, futureStates } = useStore(useEditorStore.temporal, (s) => ({
+    pastStates: s.pastStates,
+    futureStates: s.futureStates,
+  }));
+  const canUndo = pastStates.length > 0;
+  const canRedo = futureStates.length > 0;
+  const handleUndo = useCallback(() => useEditorStore.temporal.getState().undo(), []);
+  const handleRedo = useCallback(() => useEditorStore.temporal.getState().redo(), []);
 
   const [activePanel, setActivePanel] = useState<Panel>(null);
   const [manualPath, setManualPath] = useState('');
@@ -207,6 +219,18 @@ export default function App() {
             icon={<FolderOpen className="w-4 h-4" />}
             label="Open"
             onClick={IS_ELECTRON ? handleOpenFile : () => useEditorStore.getState().reset()}
+          />
+          <ToolbarButton
+            icon={<Undo2 className="w-4 h-4" />}
+            label="Undo"
+            onClick={handleUndo}
+            disabled={!canUndo}
+          />
+          <ToolbarButton
+            icon={<Redo2 className="w-4 h-4" />}
+            label="Redo"
+            onClick={handleRedo}
+            disabled={!canRedo}
           />
           <ToolbarButton
             icon={<Sparkles className="w-4 h-4" />}

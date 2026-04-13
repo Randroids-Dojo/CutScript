@@ -227,6 +227,14 @@ export const useEditorStore = create<EditorState & EditorActions>()(
 
       reset: () => set(initialState),
     }),
-    { limit: 100 },
+    {
+      limit: 100,
+      partialize: (state) => ({
+        words: state.words,
+        deletedRanges: state.deletedRanges,
+        segments: state.segments,
+        language: state.language,
+      }),
+    },
   ),
 );
