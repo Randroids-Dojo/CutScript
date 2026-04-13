@@ -64,6 +64,7 @@ def transcribe_audio(
     use_gpu: bool = True,
     use_cache: bool = True,
     language: Optional[str] = None,
+    progress_cb=None,
 ) -> dict:
     """
     Transcribe audio/video file and return word-level timestamps.
@@ -73,14 +74,19 @@ def transcribe_audio(
     """
     file_path = Path(file_path)
 
+    progress = progress_cb or (lambda pct, label: None)
+
     if use_cache:
         cached = load_from_cache(file_path, model_name, "transcribe_wx")
         if cached:
             logger.info("Using cached transcription")
+            progress(100, "Done (cached)")
             return cached
 
+    progress(5, "Loading model…")
     video_extensions = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
     if file_path.suffix.lower() in video_extensions:
+        progress(10, "Extracting audio…")
         audio_path = extract_audio(file_path)
     else:
         audio_path = file_path
@@ -91,7 +97,7 @@ def transcribe_audio(
     logger.info(f"Transcribing: {file_path}")
 
     if WHISPERX_AVAILABLE:
-        result = _transcribe_whisperx(model, str(audio_path), device, language)
+        result = _transcribe_whisperx(model, str(audio_path), device, language, progress)
     else:
         result = _transcribe_standard(model, str(audio_path), language)
 
@@ -101,15 +107,18 @@ def transcribe_audio(
     return result
 
 
-def _transcribe_whisperx(model, audio_path: str, device: torch.device, language: Optional[str]) -> dict:
+def _transcribe_whisperx(model, audio_path: str, device: torch.device, language: Optional[str], progress) -> dict:
+    progress(20, "Detecting speech…")
     audio = whisperx.load_audio(audio_path)
     transcribe_opts = {}
     if language:
         transcribe_opts["language"] = language
 
+    progress(30, "Transcribing…")
     result = model.transcribe(audio, batch_size=16, **transcribe_opts)
     detected_language = result.get("language", "en")
 
+    progress(70, "Aligning words…")
     align_model, align_metadata = whisperx.load_align_model(
         language_code=detected_language,
         device=str(device),
@@ -122,6 +131,7 @@ def _transcribe_whisperx(model, audio_path: str, device: torch.device, language:
         str(device),
         return_char_alignments=False,
     )
+    progress(90, "Finalizing…")
 
     words = []
     for seg in aligned.get("segments", []):
