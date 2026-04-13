@@ -58,9 +58,9 @@ def get_optimal_device():
                     best_device = i
             return torch.device(f"cuda:{best_device}")
         return torch.device("cuda:0")
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return torch.device("mps")
     else:
+        # MPS (Apple Silicon) is intentionally skipped — ctranslate2/faster-whisper
+        # only supports cuda and cpu.
         return torch.device("cpu")
 
 
