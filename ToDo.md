@@ -4,7 +4,6 @@
 
 - [ ] **66 cuts on Paste edits** — cuts final words and includes the same word from later in the segment (e.g. "here")
 - [ ] **Crash: filler words + Settings** — crash when finding filler words, switching to Settings, then back to AI panel
-- [ ] **Backend status shows red until Settings visited** — should resolve without requiring a Settings visit
 - [ ] **Random `tmp.mp4` filename** — uploaded/temp files get a random tmp name; should derive from the original filename
 
 ## Features
@@ -27,3 +26,4 @@
 ## Done
 
 - [x] **Disable undo at start** — undo history now clears after transcription/project load so Undo is disabled until the first edit
+- [x] **Backend status shows red until Settings visited** — browser mode now auto-triggers `startBackend()` on first offline detection
