@@ -9,7 +9,7 @@ Check out the original at [github.com/DataAnts-AI/CutScript](https://github.com/
 This fork is in its early stages. Changes made on top of the original:
 
 - **File System Access API for browser mode** — replaces manual path input with a native OS file picker (`showOpenFilePicker()`); files are uploaded to a new `POST /upload` endpoint which saves to a temp file and returns a path for the existing transcription flow
-- **Bulk copy/paste transcript editing** — copy the transcript, edit it in any external editor, paste back to apply all cuts at once (LCS diff, single undo step)
+- **Bulk copy/paste transcript editing** — copy the transcript, edit it in any external editor, paste back to apply all cuts at once (LCS diff, single undo step). The diff is biased toward matching repeated words ("here", "um") to their earliest original position, so deleting a phrase that contains common words produces a single contiguous cut at the right place instead of fragmented cuts that snip the user's kept word.
 - **Backend status and control** — live connection indicator with adaptive polling (1s retry when offline, 5s when online); restart/start button works in both Electron and browser mode; browser mode uses a Vite dev middleware (`POST /api/start-backend`) to spawn the process and the polling loop auto-triggers it on first offline detection so the dot resolves without a Settings detour; status is in the Zustand store so any component can read it; full status section in the Settings panel
 - **Dev environment** — migrated backend from pip + manual venv to `uv`; `uv sync` handles Python 3.11, venv creation, and the deepfilternet/numpy conflict via a pyproject.toml override
 - **Documentation** — restructured from a single README into topic-specific docs under `Docs/`
