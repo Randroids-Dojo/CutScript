@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useEditorStore } from './store/editorStore';
@@ -52,6 +52,7 @@ export default function App() {
   const [whisperModel, setWhisperModel] = useState('base');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [transcriptionLabel, setTranscriptionLabel] = useState('');
+  const autoStartedRef = useRef(false);
 
   useKeyboardShortcuts();
 
@@ -70,8 +71,16 @@ export default function App() {
         const res = await fetch(`${backendUrl}/health`, { signal: AbortSignal.timeout(2000) });
         online = res.ok;
       } catch {}
+      if (cancelled) return;
       setBackendStatus(online ? 'online' : 'offline');
-      if (!cancelled) timeoutId = setTimeout(check, online ? 5000 : 1000);
+      // Browser mode: Electron auto-starts the backend, but the browser/dev
+      // build relies on the user clicking "Start Backend". Trigger it once
+      // automatically so the dot resolves without a Settings detour.
+      if (!online && !IS_ELECTRON && !autoStartedRef.current) {
+        autoStartedRef.current = true;
+        startBackend().catch(() => {});
+      }
+      timeoutId = setTimeout(check, online ? 5000 : 1000);
     };
     check();
     return () => { cancelled = true; clearTimeout(timeoutId); };
