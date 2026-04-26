@@ -44,7 +44,7 @@ For larger edits, use the copy/paste workflow in the transcript toolbar:
 6. A preview shows how many words will be cut and how many cuts will be created
 7. Click **Apply Cuts** — all deletions are applied as a single undo step
 
-The diff uses a Longest Common Subsequence (LCS) algorithm. Only deletions are detected — if you changed a word ("store" → "shop"), that word is treated as unchanged and stays in the video.
+The diff uses a Longest Common Subsequence (LCS) algorithm. Only deletions are detected — if you changed a word ("store" → "shop"), that word is treated as unchanged and stays in the video. When the same word appears multiple times in the transcript (e.g. "here", "um"), the diff prefers to keep its earliest occurrence, so deleting a trailing phrase produces a single clean cut instead of fragmented cuts that snip the wrong instance.
 
 ---
 

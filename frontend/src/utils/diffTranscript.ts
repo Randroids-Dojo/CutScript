@@ -73,15 +73,21 @@ export function diffTranscript(
     }
   }
 
+  // Take the diagonal only when the match is necessary (skipping it would lose LCS
+  // length). This biases toward matching repeated words to their EARLIEST original
+  // position; the standard "take match when seen" rule pins them to the LATEST,
+  // which fragments cuts and silently shifts the user's kept word to a later instance.
   const inLCS = new Set<number>();
   let i = n;
   let j = m;
   while (i > 0 && j > 0) {
-    if (activeWords[i - 1].normalized === pastedTokens[j - 1]) {
+    const cur = dp[i * (m + 1) + j];
+    const up = dp[(i - 1) * (m + 1) + j];
+    if (activeWords[i - 1].normalized === pastedTokens[j - 1] && up < cur) {
       inLCS.add(i - 1);
       i--;
       j--;
-    } else if (dp[(i - 1) * (m + 1) + j] >= dp[i * (m + 1) + (j - 1)]) {
+    } else if (up >= dp[i * (m + 1) + (j - 1)]) {
       i--;
     } else {
       j--;
